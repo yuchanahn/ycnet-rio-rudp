@@ -115,10 +115,11 @@ namespace yc_pack {
 
 	// ReSharper disable once IdentifierTypo
 	inline bool pkt_vrfct(char* pkt, const size_t len) {
+		if (pkt == nullptr || len == 0) return false;
 		udp::convert_ack ack;
 		ack.load(*pkt);
-		if(ack.is_ack_packet && len == 1) return true;
-		if (len < HEADER_SIZE) return false;
+		if (ack.is_ack_packet) return ack.use_ack && len == 1;
+		if (len < static_cast<size_t>(HEADER_SIZE) + 1) return false;
 		const packet_size_type size = *reinterpret_cast<packet_size_type*>(pkt+1);
 		const packet_id_type id = *reinterpret_cast<packet_id_type*>(pkt + 1 + sizeof(packet_size_type));
 		if(id < 0 || id >= __packets_max__) return false;

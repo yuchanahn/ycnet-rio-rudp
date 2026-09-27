@@ -33,6 +33,20 @@ void test_ack_header_roundtrip() {
           "ACK header roundtrip keeps flags and 6-bit sequence");
 }
 
+void test_packet_validation_rejects_malformed_ack() {
+    char malformed_ack[1] = {static_cast<char>(0x40)}; // is_ack_packet=1, use_ack=0
+    check(!yc_pack::pkt_vrfct(malformed_ack, sizeof(malformed_ack)),
+          "ACK packet requires both ACK and sequence-use flags");
+
+    yc_pack::udp::convert_ack ack;
+    ack.use_ack = true;
+    ack.is_ack_packet = true;
+    ack.counter = 7;
+    char valid_ack[1] = {static_cast<char>(ack.to_ack())};
+    check(yc_pack::pkt_vrfct(valid_ack, sizeof(valid_ack)),
+          "Well-formed one-byte ACK is accepted");
+}
+
 void test_reliable_send_and_ack_complete() {
     yc_rudp::rudp_buffer_t buffers(1);
     std::vector<int> resend;
@@ -141,6 +155,7 @@ void test_sequence_wrap() {
 
 int main() {
     test_ack_header_roundtrip();
+    test_packet_validation_rejects_malformed_ack();
     test_reliable_send_and_ack_complete();
     test_rto_smoothing_and_karn_rule();
     test_resend_backoff_and_timeout();
