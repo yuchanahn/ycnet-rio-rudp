@@ -75,6 +75,8 @@ ctest --test-dir build -C Debug --output-on-failure
 
 `examples/arena`에는 YCNet을 실제 전송 계층으로 사용하는 작은 2D arena 시나리오가 있습니다. 서버가 위치·HP·사망 상태를 결정하며, 두 bot client가 실제 loopback UDP/RIO 경로로 접속합니다.
 
+![Authoritative Arena demo](docs/arena_demo.gif)
+
 패킷 정책은 역할에 따라 분리했습니다.
 
 | 데이터 | 정책 | 이유 |
@@ -87,7 +89,10 @@ ctest --test-dir build -C Debug --output-on-failure
 
 ```powershell
 .\build\Debug\arena_demo.exe
+python tools\render_arena_demo_gif.py
 ```
+
+GIF는 `arena_demo.exe`의 실제 tick 출력과 `demo_result=PASS` 실행을 파싱해 생성합니다.
 
 검증한 실행 시나리오:
 
