@@ -90,9 +90,10 @@ namespace yc_rudp
     
     // 받아야할 패킷 번호 보다 뒷 번호 인지 확인 하는 함수.
     inline bool is_later_seq(int seq1, int seq2) {
-        seq1 += seq1 < ACK_COUNTER_MAX / 2 ? ACK_COUNTER_MAX : 0;
-        seq2 += seq2 < ACK_COUNTER_MAX / 2 ? ACK_COUNTER_MAX : 0;
-        return seq1 > seq2;
+        seq1 = ((seq1 % ACK_COUNTER_MAX) + ACK_COUNTER_MAX) % ACK_COUNTER_MAX;
+        seq2 = ((seq2 % ACK_COUNTER_MAX) + ACK_COUNTER_MAX) % ACK_COUNTER_MAX;
+        const int delta = (seq1 - seq2 + ACK_COUNTER_MAX) % ACK_COUNTER_MAX;
+        return delta > 0 && delta < ACK_COUNTER_MAX / 2;
     }
     //패킷에서 seq를 뽑아내는 함수
     inline int get_seq(const char* buf) {

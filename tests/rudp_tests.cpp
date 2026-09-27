@@ -33,6 +33,13 @@ void test_ack_header_roundtrip() {
           "ACK header roundtrip keeps flags and 6-bit sequence");
 }
 
+void test_sequence_order_across_midpoint_and_wrap() {
+    check(yc_rudp::is_later_seq(33, 32), "seq=33 is later than seq=32");
+    check(!yc_rudp::is_later_seq(31, 32), "seq=31 is older than seq=32");
+    check(yc_rudp::is_later_seq(0, 63), "seq=0 is later than seq=63 across wrap");
+    check(!yc_rudp::is_later_seq(63, 0), "seq=63 is older than seq=0 across wrap");
+}
+
 void test_packet_validation_rejects_malformed_ack() {
     char malformed_ack[1] = {static_cast<char>(0x40)}; // is_ack_packet=1, use_ack=0
     check(!yc_pack::pkt_vrfct(malformed_ack, sizeof(malformed_ack)),
@@ -155,6 +162,7 @@ void test_sequence_wrap() {
 
 int main() {
     test_ack_header_roundtrip();
+    test_sequence_order_across_midpoint_and_wrap();
     test_packet_validation_rejects_malformed_ack();
     test_reliable_send_and_ack_complete();
     test_rto_smoothing_and_karn_rule();
