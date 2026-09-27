@@ -3,12 +3,23 @@
 #include "yc_packet.hpp"
 #include "yc_rudp.hpp"
 #include "nto_memory.hpp"
+#include <cstdint>
 #include <ranges>
 #include <utility>
 
 // ReSharper disable once IdentifierTypo
 namespace ycnet
 {
+    struct rudp_metrics {
+        std::uint64_t reliable_sent{};
+        std::uint64_t unreliable_sent{};
+        std::uint64_t retransmissions{};
+        std::uint64_t acks_received{};
+        std::uint64_t duplicate_reacks{};
+        std::uint64_t rejected_reliable_sends{};
+        int current_rto_ms{100};
+    };
+
     template <typename Packet>
     concept is_ack_packet = requires { Packet::__packet__id; Packet::is_apacket; };
     template <typename Packet>
@@ -50,6 +61,7 @@ namespace ycnet
         std::function<void(char*, size_t)> send_func_;
         std::function<void(std::string)> log_func_;
         char send_packet_build_buff_[1024] = {};
+        rudp_metrics metrics_{};
         
         void send_ack(const int seq, const int thread_num = 0) const {
             char pkt = make_ack_pkt(seq);
@@ -83,10 +95,14 @@ namespace ycnet
                 if (set_send_complete(rudp_buffs_.send_buffer, resend_buff_, rto_, yc_rudp::get_seq(buf)) == -1) {
                     log_func_("set_send_complete() error");
                 }
+                else {
+                    ++metrics_.acks_received;
+                }
             }
             else {
                 const auto seq = yc_rudp::get_seq(buf);
                 if (seq >= 0 && seq != end_ && !yc_rudp::is_later_seq(seq, end_)) {
+                    ++metrics_.duplicate_reacks;
                     send_ack(seq);
                     return;
                 }
@@ -115,12 +131,14 @@ namespace ycnet
             auto size = build_send_buffer(send_packet_build_buff_, pkt);
             const auto seq = yc_rudp::ready_to_send(rudp_buffs_.send_buffer, resend_buff_, send_packet_build_buff_, size, true, send_seq_);
             if (seq < 0) {
+                ++metrics_.rejected_reliable_sends;
                 log_func_("reliable send window full");
                 return false;
             }
             auto& send_buf = rudp_buffs_.send_buffer[seq];
             send_func_(send_buf.data, send_buf.len);
             send_seq_ = yc_rudp::get_next_seq(send_seq_);
+            ++metrics_.reliable_sent;
             return true;
         }
 
@@ -131,16 +149,24 @@ namespace ycnet
             const auto seq = yc_rudp::ready_to_send(rudp_buffs_.send_buffer, send_packet_build_buff_, size, false, 0);
             auto& send_buf = rudp_buffs_.send_buffer[seq];
             send_func_(send_buf.data, send_buf.len);
+            ++metrics_.unreliable_sent;
         }
         
         //ack 패킷 수신에 실패 했을 경우 패킷을 재전송 합니다.
         void prc_resend() {
             auto r = get_resend_packets(rudp_buffs_.send_buffer, resend_buff_, rto_, 1000);
+            metrics_.retransmissions += r.size();
             for(auto& i : r) {
                 log_func_(std::format("resend to {}", i));
                 auto& pkt = rudp_buffs_.send_buffer[i];
                 send_func_(pkt.data, pkt.len);
             }
+        }
+
+        [[nodiscard]] rudp_metrics metrics() const {
+            auto snapshot = metrics_;
+            snapshot.current_rto_ms = rto_.rto_ms;
+            return snapshot;
         }
     };
 
