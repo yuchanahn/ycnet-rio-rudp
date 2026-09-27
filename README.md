@@ -16,6 +16,7 @@ Windows Registered I/O(RIO) 기반 UDP 전송 계층과 신뢰성 보강 계층(
 - 시퀀스 wrap-around 순서 비교
 - 런타임 RUDP 메트릭
 - 다중 클라이언트 / 서버 수용량 / 패킷 손실 회귀 테스트
+- YCNet을 실제 전송 계층으로 사용하는 authoritative 2D arena demo
 
 ## 구조
 
@@ -43,10 +44,11 @@ flowchart LR
 | 시퀀스 wrap | 31/32, 63/0 경계 순서 오판 | modulo half-range 비교 | `rudp_tests` |
 | 서버 수용량 초과 | 빈 client id queue에서 `back()` 호출 가능 | 신규 엔드포인트 명시적 거부 | `rio_capacity_smoke` |
 | timeout 후 id 재사용 | 만료된 endpoint→id 매핑이 남아 새 클라이언트와 같은 id를 가리킬 수 있음 | timeout 시 endpoint 매핑 제거 후 id 반환 | `rio_timeout_reuse_smoke` |
+| client unreliable send | 오래된 `ready_to_send` 호출 시그니처가 템플릿 인스턴스화 전까지 발견되지 않음 | resend buffer를 포함한 현재 API로 호출 정합성 복구 | `arena_network_smoke` |
 
 ## 검증
 
-Visual Studio 2022 / Windows SDK 10.0.19041 / Debug 구성에서 다음 11개 테스트를 `CTest`로 실행합니다.
+Visual Studio 2022 / Windows SDK 10.0.19041 / Debug 구성에서 다음 13개 테스트를 `CTest`로 실행합니다.
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -54,7 +56,7 @@ cmake --build build --config Debug --parallel
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-현재 회귀 테스트 결과: **11/11 통과**.
+현재 회귀 테스트 결과: **13/13 통과**.
 
 - RUDP ACK / sequence / reorder / wrap-around
 - ACK 유실 재현
@@ -66,6 +68,37 @@ ctest --test-dir build -C Debug --output-on-failure
 - timeout endpoint 정리 및 client id 재사용
 - runtime metrics
 - reproducible loss benchmark
+- authoritative arena world simulation
+- Windows RIO 2-client arena integration
+
+## Authoritative Arena Demo
+
+`examples/arena`에는 YCNet을 실제 전송 계층으로 사용하는 작은 2D arena 시나리오가 있습니다. 서버가 위치·HP·사망 상태를 결정하며, 두 bot client가 실제 loopback UDP/RIO 경로로 접속합니다.
+
+패킷 정책은 역할에 따라 분리했습니다.
+
+| 데이터 | 정책 | 이유 |
+| --- | --- | --- |
+| join | reliable | 연결 식별 이벤트 유실 방지 |
+| movement input | unreliable | 다음 입력이 계속 도착하는 latency-sensitive 상태 |
+| world snapshot | unreliable | 최신 상태가 과거 snapshot보다 중요 |
+| attack | reliable | 단발성 게임 이벤트 유실 방지 |
+| damage | reliable | HP 변경 이벤트 유실 방지 |
+
+```powershell
+.\build\Debug\arena_demo.exe
+```
+
+검증한 실행 시나리오:
+
+1. bot 2개 RIO 접속 및 join nonce→server client id 매핑
+2. 양쪽 bot이 중심으로 이동하며 서버가 입력을 정규화·경계 제한 후 authoritative simulation
+3. 한 bot이 상대를 네 번 공격
+4. 상대 HP가 `100 → 75 → 50 → 25 → 0`
+5. 양쪽 client가 damage event를 각각 4회 수신
+6. client별 reliable/unreliable send 수, retransmission, 현재 RTO 출력
+
+`arena_network_smoke`는 같은 흐름을 자동 검증하며, client id의 UDP 도착 순서를 가정하지 않고 join nonce로 실제 server id를 확인합니다.
 
 ## RUDP 손실 벤치마크
 
@@ -98,4 +131,6 @@ ctest --test-dir build -C Debug --output-on-failure
 
 ## 다음 확장
 
-YCNet을 실제 사용 사례와 연결하기 위해 작은 네트워크 게임을 별도 예제로 구성할 예정입니다. 목표는 이동/상태 동기화, reliable event와 unreliable state update의 역할 분리, 네트워크 상태 시각화입니다.
+- 공개 GitHub remote 생성 후 코드 deep link 연결
+- arena 실행 화면/GIF 또는 상태 시각화 추가
+- packet loss / retransmission / RTO를 demo 화면에서 함께 표시
