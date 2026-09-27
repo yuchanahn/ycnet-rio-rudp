@@ -240,6 +240,11 @@ namespace ycnet
                 auto opt_id = get_user_id(i->ep);
                 size_t id = 0;
                 if (!opt_id.has_value()) {
+                    if (id_index_q_.empty()) {
+                        log_func_(std::format("server client capacity reached; rejecting {}", i->ep.to_string()));
+                        release_buf(packets_buffer_, i);
+                        continue;
+                    }
                     const auto new_id = id_index_q_.back();
                     id_index_q_.pop_back();
                     endpoints_[new_id] = i->ep;
