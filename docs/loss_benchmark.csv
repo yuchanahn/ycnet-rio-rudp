@@ -1,0 +1,5 @@
+loss_percent,messages,delivered,delivery_ratio,attempted_datagrams,dropped_datagrams,delivered_datagrams,retransmissions,final_rto_ms,elapsed_ms
+0,100,100,1,200,0,200,0,10,2459.56
+1,100,100,1,204,2,202,2,10,2459.38
+5,100,100,1,222,11,211,11,10,2378.08
+10,100,100,1,249,25,224,25,20,2446.97

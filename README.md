@@ -104,9 +104,14 @@ ctest --test-dir build -C Debug --output-on-failure
 
 아래 값은 deterministic datagram loss simulator에서 reliable message 100개를 전송한 실제 실행 결과입니다.
 
+![RUDP loss benchmark](docs/loss_benchmark.png)
+
 ```powershell
 .\build\Debug\loss_benchmark.exe 100
+python tools\render_loss_benchmark_chart.py --messages 100
 ```
+
+원본 CSV는 `docs/loss_benchmark.csv`에 저장되며, 그래프도 같은 실행에서 다시 생성됩니다.
 
 | 손실률 | 메시지 전달 | 시도 datagram | drop | 재전송 | 최종 RTO |
 | ---: | ---: | ---: | ---: | ---: | ---: |
