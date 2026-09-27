@@ -110,13 +110,18 @@ namespace ycnet
         }
 
         // send packet
-        void send(is_ack_packet auto& packet) {
+        bool send(is_ack_packet auto& packet) {
             auto pkt = yc_pack::pack(packet);
             auto size = build_send_buffer(send_packet_build_buff_, pkt);
             const auto seq = yc_rudp::ready_to_send(rudp_buffs_.send_buffer, resend_buff_, send_packet_build_buff_, size, true, send_seq_);
+            if (seq < 0) {
+                log_func_("reliable send window full");
+                return false;
+            }
             auto& send_buf = rudp_buffs_.send_buffer[seq];
             send_func_(send_buf.data, send_buf.len);
             send_seq_ = yc_rudp::get_next_seq(send_seq_);
+            return true;
         }
 
         // send packet without ack
@@ -273,14 +278,19 @@ namespace ycnet
             std::ranges::for_each(packets | std::views::keys, [this](const auto& i) { prc_pkt(i); });
         }
 
-        void send(is_ack_packet auto& packet, const size_t& id, const int thread_num = 0) {
+        bool send(is_ack_packet auto& packet, const size_t& id, const int thread_num = 0) {
             auto pkt = yc_pack::pack(packet);
             char buf[1024] = {};
             auto size = build_send_buffer(buf, pkt);
             const auto seq = yc_rudp::ready_to_send(rudp_buffs_[id].send_buffer, resend_index_buffs_[id], buf, size, true, send_seq_[id]);
+            if (seq < 0) {
+                log_func_(std::format("reliable send window full for client {}", id));
+                return false;
+            }
             auto& send_buf = rudp_buffs_[id].send_buffer[seq];
             core::send_udp(send_buf.data, send_buf.len, endpoints_[id], thread_num);
             send_seq_[id] = yc_rudp::get_next_seq(send_seq_[id]);
+            return true;
         }
 
         void send(is_no_ack_packet auto& packet, const size_t& id, const int thread_num = 0) {
