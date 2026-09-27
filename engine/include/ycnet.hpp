@@ -87,6 +87,11 @@ namespace ycnet
                 }
             }
             else {
+                const auto seq = yc_rudp::get_seq(buf);
+                if (seq >= 0 && seq != end_ && !yc_rudp::is_later_seq(seq, end_)) {
+                    send_ack(seq);
+                    return;
+                }
                 if (push_packet(rudp_buffs_.pkt_buffer, 0, 1, buf, len) == -1) {
                     log_func_(std::format("id : {} - push_packet failed!", "client_side"));
                 }
@@ -250,6 +255,12 @@ namespace ycnet
                     }
                 }
                 else {
+                    const auto seq = yc_rudp::get_seq(i->buf);
+                    if (seq >= 0 && seq != end_[id] && !yc_rudp::is_later_seq(seq, end_[id])) {
+                        send_ack(id, seq);
+                        release_buf(packets_buffer_, i);
+                        continue;
+                    }
                     if (push_packet(rudp_buffs_[id].pkt_buffer, 0, 1, i->buf, i->len) == -1) {
                         log_func_(std::format("id : {} - push_packet failed!", id));
                     }
