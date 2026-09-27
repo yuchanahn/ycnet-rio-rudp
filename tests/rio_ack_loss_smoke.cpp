@@ -107,7 +107,10 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    server.kill();
+    const auto kill_result = server.kill();
+    if (!kill_result) {
+        std::cerr << "server kill failed: " << kill_result.err << std::endl;
+    }
     closesocket(client_socket);
     WSACleanup();
 
