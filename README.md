@@ -42,10 +42,11 @@ flowchart LR
 | 송신 윈도우 포화 | 64개 slot 이후 기존 상태 덮어쓰기 가능 | reliable send 거부 + 로그 | `send_window_tests` |
 | 시퀀스 wrap | 31/32, 63/0 경계 순서 오판 | modulo half-range 비교 | `rudp_tests` |
 | 서버 수용량 초과 | 빈 client id queue에서 `back()` 호출 가능 | 신규 엔드포인트 명시적 거부 | `rio_capacity_smoke` |
+| timeout 후 id 재사용 | 만료된 endpoint→id 매핑이 남아 새 클라이언트와 같은 id를 가리킬 수 있음 | timeout 시 endpoint 매핑 제거 후 id 반환 | `rio_timeout_reuse_smoke` |
 
 ## 검증
 
-Visual Studio 2022 / Windows SDK 10.0.19041 / Debug 구성에서 다음 10개 테스트를 `CTest`로 실행합니다.
+Visual Studio 2022 / Windows SDK 10.0.19041 / Debug 구성에서 다음 11개 테스트를 `CTest`로 실행합니다.
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -53,7 +54,7 @@ cmake --build build --config Debug --parallel
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-현재 회귀 테스트 결과: **10/10 통과**.
+현재 회귀 테스트 결과: **11/11 통과**.
 
 - RUDP ACK / sequence / reorder / wrap-around
 - ACK 유실 재현
@@ -62,6 +63,7 @@ ctest --test-dir build -C Debug --output-on-failure
 - Windows RIO 단일 클라이언트
 - Windows RIO 8-client isolation
 - MaxClient 초과 거부
+- timeout endpoint 정리 및 client id 재사용
 - runtime metrics
 - reproducible loss benchmark
 
