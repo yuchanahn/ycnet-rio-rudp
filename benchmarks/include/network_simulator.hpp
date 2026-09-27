@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <utility>
 #include <vector>
 
 namespace ycnet::test {

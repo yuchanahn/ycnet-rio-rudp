@@ -33,7 +33,7 @@ if(YCNET_BUILD_TESTS)
 
   add_executable(network_loss_tests tests/network_loss_tests.cpp)
   target_link_libraries(network_loss_tests PRIVATE ycnet)
-  target_include_directories(network_loss_tests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+  target_include_directories(network_loss_tests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support ${PROJECT_SOURCE_DIR}/benchmarks/include)
   target_compile_options(network_loss_tests PRIVATE /std:c++latest)
 
   add_executable(rio_multi_client_smoke tests/rio_multi_client_smoke.cpp)
@@ -50,4 +50,14 @@ if(YCNET_BUILD_TESTS)
   target_link_libraries(metrics_tests PRIVATE ycnet)
   target_include_directories(metrics_tests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
   target_compile_options(metrics_tests PRIVATE /std:c++latest)
+
+  add_executable(benchmark_tests tests/benchmark_tests.cpp)
+  target_link_libraries(benchmark_tests PRIVATE ycnet)
+  target_include_directories(benchmark_tests PRIVATE ${PROJECT_SOURCE_DIR}/benchmarks/include ${PROJECT_SOURCE_DIR}/tests/support)
+  target_compile_options(benchmark_tests PRIVATE /std:c++latest)
 endif()
+
+add_executable(loss_benchmark benchmarks/loss_benchmark_main.cpp)
+target_link_libraries(loss_benchmark PRIVATE ycnet)
+target_include_directories(loss_benchmark PRIVATE ${PROJECT_SOURCE_DIR}/benchmarks/include)
+target_compile_options(loss_benchmark PRIVATE /std:c++latest)
