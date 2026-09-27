@@ -43,8 +43,7 @@ namespace ycnet
         yc_rudp::rudp_buffer_t rudp_buffs_;
         std::vector<int> resend_buff_;
         std::vector<yc_rudp::receive_packet_raw> no_ack_buffs_;
-        // ReSharper disable once IdentifierTypo
-        int rtts_;
+        yc_rudp::rto_state rto_;
         int seq_;
         int send_seq_;
         int end_;
@@ -68,7 +67,6 @@ namespace ycnet
         explicit rudp_handler(std::function<void(std::string)> log_func,
                               std::function<void(char*, size_t)> send_func)
         : rudp_buffs_(1)
-        , rtts_(100)
         , seq_(0)
         , send_seq_(0)
         , end_(0)
@@ -82,7 +80,7 @@ namespace ycnet
                 return;
             }
             if (yc_rudp::is_ack_packet(buf)) {
-                if (set_send_complete(rudp_buffs_.send_buffer, resend_buff_, rtts_, yc_rudp::get_seq(buf)) == -1) {
+                if (set_send_complete(rudp_buffs_.send_buffer, resend_buff_, rto_, yc_rudp::get_seq(buf)) == -1) {
                     log_func_("set_send_complete() error");
                 }
             }
@@ -132,7 +130,7 @@ namespace ycnet
         
         //ack 패킷 수신에 실패 했을 경우 패킷을 재전송 합니다.
         void prc_resend() {
-            auto r = get_resend_packets(rudp_buffs_.send_buffer, resend_buff_, rtts_, 1000);
+            auto r = get_resend_packets(rudp_buffs_.send_buffer, resend_buff_, rto_, 1000);
             for(auto& i : r) {
                 log_func_(std::format("resend to {}", i));
                 auto& pkt = rudp_buffs_.send_buffer[i];
@@ -154,8 +152,7 @@ namespace ycnet
         std::vector<yc_rudp::rudp_buffer_t> rudp_buffs_;
         std::vector<std::vector<int>> resend_index_buffs_;
         std::vector<std::vector<yc_rudp::receive_packet_raw>> no_ack_buffs_;
-        // ReSharper disable once IdentifierTypo
-        std::vector<int> rtts_;
+        std::vector<yc_rudp::rto_state> rto_states_;
         std::vector<int> seq_;
         std::vector<int> end_;
         std::vector<int> send_seq_;
@@ -195,7 +192,7 @@ namespace ycnet
             return pkt_data.size;
         }
         bool reset_connection(const size_t& id) {
-            rtts_[id] = 100;
+            rto_states_[id].reset();
             seq_[id] = 0;
             end_[id] = 0;
             send_seq_[id] = 0;
@@ -210,7 +207,7 @@ namespace ycnet
         explicit rudp_server(std::function<void(std::string)> log_func): endpoints_(MaxClient)
                                                                          , resend_index_buffs_(MaxClient)
                                                                          , no_ack_buffs_(MaxClient)
-                                                                         , rtts_(MaxClient)
+                                                                         , rto_states_(MaxClient)
                                                                          , seq_(MaxClient)
                                                                          , end_(MaxClient)
                                                                          , send_seq_(MaxClient)
@@ -241,7 +238,7 @@ namespace ycnet
                     const auto new_id = id_index_q_.back();
                     id_index_q_.pop_back();
                     endpoints_[new_id] = i->ep;
-                    rtts_[new_id] = 100;
+                    rto_states_[new_id].reset();
                     ids_[i->ep] = new_id;
                     seq_[new_id] = 0;
                     end_[new_id] = 0;
@@ -250,7 +247,7 @@ namespace ycnet
                 }
                 else { id = *opt_id; }
                 if (yc_rudp::is_ack_packet(i->buf)) {
-                    if (set_send_complete(rudp_buffs_[id].send_buffer, resend_index_buffs_[id], rtts_[id], yc_rudp::get_seq(i->buf)) == -1) {
+                    if (set_send_complete(rudp_buffs_[id].send_buffer, resend_index_buffs_[id], rto_states_[id], yc_rudp::get_seq(i->buf)) == -1) {
                         log_func_("set_send_complete() error");
                     }
                 }
@@ -296,8 +293,8 @@ namespace ycnet
         }
 
         void prc_resend(const size_t& id, const int thread_num = 0) {
-            const auto r = get_resend_packets(rudp_buffs_[id].send_buffer, resend_index_buffs_[id], rtts_[id], 1000);
-            if(r.empty() && rtts_[id] == -1) {
+            const auto r = get_resend_packets(rudp_buffs_[id].send_buffer, resend_index_buffs_[id], rto_states_[id], time_out_rtt_);
+            if(r.empty() && rto_states_[id].timed_out) {
                 time_out_(endpoints_[id], id);
                 reset_connection(id);
                 return;

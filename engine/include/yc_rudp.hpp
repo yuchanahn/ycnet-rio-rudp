@@ -2,8 +2,9 @@
 // ReSharper disable CppClangTidyBugproneImplicitWideningOfMultiplicationResult
 #pragma once
 #include <algorithm>
-#include <vector>
 #include <chrono>
+#include <cmath>
+#include <vector>
 
 #include "yc_packet.hpp"
 
@@ -21,6 +22,22 @@ namespace yc_rudp
     struct send_packet_raw : packet_raw {
         int64_t timestamp{};
         bool is_resend_packet{};
+    };
+
+    struct rto_state {
+        bool has_sample{};
+        bool timed_out{};
+        double srtt_ms{};
+        double rttvar_ms{};
+        int rto_ms{100};
+
+        void reset() {
+            has_sample = false;
+            timed_out = false;
+            srtt_ms = 0.0;
+            rttvar_ms = 0.0;
+            rto_ms = 100;
+        }
     };
     struct rudp_buffer_t {
         std::vector<packet_raw> pkt_buffer;
@@ -49,7 +66,26 @@ namespace yc_rudp
     
     [[nodiscard]] inline int64_t get_timestamp() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    inline void update_rto(rto_state& state, const int sample_ms) {
+        const auto sample = static_cast<double>((std::max)(sample_ms, 1));
+        if (!state.has_sample) {
+            state.srtt_ms = sample;
+            state.rttvar_ms = sample / 2.0;
+            state.has_sample = true;
+        }
+        else {
+            const auto error = std::abs(state.srtt_ms - sample);
+            state.rttvar_ms = 0.75 * state.rttvar_ms + 0.25 * error;
+            state.srtt_ms = 0.875 * state.srtt_ms + 0.125 * sample;
+        }
+
+        state.rto_ms = (std::max)(
+            10,
+            static_cast<int>(std::lround(state.srtt_ms + 4.0 * state.rttvar_ms)));
+        state.timed_out = false;
     }
     
     // 받아야할 패킷 번호 보다 뒷 번호 인지 확인 하는 함수.
@@ -218,53 +254,67 @@ namespace yc_rudp
     /**
      * \brief ack을 받았을 때 호출합니다.
      * \param send_buf [OUT] send 완료 처리를 위한 버퍼
-     * \param rtt [OUT] rtt새로 계산한 값
+     * \param rto [OUT] ACK sample로 갱신되는 RTO 상태
      * \param seq ack 패킷의 seq
      * \return send 완료 처리한 버퍼의 index, 실패시 -1
      */
     inline int set_send_complete(
         std::vector<send_packet_raw>& send_buf,
         std::vector<int>& resend_idx_buf,
-        int& rtt,
-        const int seq
+        rto_state& rto,
+        const int seq,
+        const int64_t now = get_timestamp()
         ) {
         if(!send_buf[seq].is_used) return -1;
+
+        auto& packet = send_buf[seq];
+        if (!packet.is_resend_packet) {
+            const auto sample = static_cast<int>((std::max)(int64_t{1}, now - packet.timestamp));
+            update_rto(rto, sample);
+        }
+
         const auto& it = std::find(resend_idx_buf.begin(), resend_idx_buf.end(), seq);
         if(it != resend_idx_buf.end())
             resend_idx_buf.erase(it);
-        send_buf[seq].is_used = false;
+        packet.is_used = false;
+        packet.is_resend_packet = false;
         return seq;
     }
 
     /**
-     * \brief 재전송이 필요한 패킷을 찾습니다. rtt의 최소값은 10입니다.
+     * \brief 재전송이 필요한 패킷을 찾습니다.
      * \param send_buf [OUT] resend가 필요한지 검사하는 버퍼
-     * \param rtt [OUT] new rtt, timeout이 발생했을 경우 -1
-     * \param timeout timeout을 발생 시킬 최소값 (ms)
-     * \return resend가 필요한 패킷의 seq, 없을 경우 0
+     * \param rto [OUT] timeout 시 backoff되는 RTO 상태
+     * \param timeout 연결 timeout을 발생시킬 최대 RTO (ms)
+     * \param now 테스트와 호출 시점 고정을 위한 현재 시각
+     * \return resend가 필요한 패킷의 seq 목록
      */
     inline std::vector<int> get_resend_packets(
         std::vector<send_packet_raw>& send_buf,
         std::vector<int>& resend_idx_buf,
-        int& rtt,
-        const int timeout
+        rto_state& rto,
+        const int timeout,
+        const int64_t now = get_timestamp()
         ) {
         std::vector<int> result;
         for(const int& i : resend_idx_buf) {
             auto& pkt = send_buf[i];
-            if (const auto t = get_timestamp(); pkt.timestamp + rtt < t) {
+            if (pkt.is_used && pkt.timestamp + rto.rto_ms < now) {
                 result.push_back(i);
                 pkt.is_resend_packet = true;
-                rtt = static_cast<int>(static_cast<float>(rtt) * 1.5f);
-                rtt = rtt > 10 ? rtt : 10;
-                if (rtt > timeout) {
-                    pkt.is_used = false;
-                    rtt = -1;
-                    return {};
-                }
+                pkt.timestamp = now;
             }
         }
 
+        if (result.empty()) return result;
+
+        const auto backed_off = rto.rto_ms * 2;
+        if (backed_off > timeout) {
+            rto.timed_out = true;
+            return {};
+        }
+
+        rto.rto_ms = (std::max)(10, backed_off);
         return result;
     }
 }

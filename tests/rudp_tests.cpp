@@ -46,11 +46,37 @@ void test_reliable_send_and_ack_complete() {
     check(resend.size() == 1 && resend.front() == seq, "Reliable send registers resend candidate");
     check(yc_rudp::get_seq(buffers.send_buffer[seq].data) == seq, "Reliable packet encodes sequence");
 
-    int rtt = 100;
-    const int completed = yc_rudp::set_send_complete(buffers.send_buffer, resend, rtt, seq);
+    yc_rudp::rto_state rto;
+    buffers.send_buffer[seq].timestamp = 1000;
+    const int completed = yc_rudp::set_send_complete(buffers.send_buffer, resend, rto, seq, 1080);
     check(completed == seq, "ACK completion returns sequence");
     check(!buffers.send_buffer[seq].is_used && resend.empty(), "ACK completion releases send slot");
-    check(rtt == 100, "ACK completion currently leaves RTT unchanged");
+    check(rto.has_sample, "First ACK records an RTT sample");
+    check(rto.rto_ms == 240, "First 80ms RTT sample produces 240ms RTO");
+}
+
+void test_rto_smoothing_and_karn_rule() {
+    yc_rudp::rudp_buffer_t buffers(1);
+    std::vector<int> resend;
+    char payload[] = {'R'};
+    yc_rudp::rto_state rto;
+
+    yc_rudp::ready_to_send(buffers.send_buffer, resend, payload, 1, true, 1);
+    buffers.send_buffer[1].timestamp = 1000;
+    yc_rudp::set_send_complete(buffers.send_buffer, resend, rto, 1, 1080);
+
+    yc_rudp::ready_to_send(buffers.send_buffer, resend, payload, 1, true, 2);
+    buffers.send_buffer[2].timestamp = 2000;
+    yc_rudp::set_send_complete(buffers.send_buffer, resend, rto, 2, 2100);
+    check(rto.rto_ms == 223, "RTO smooths successive 80ms and 100ms RTT samples");
+
+    const int before_retransmit_ack = rto.rto_ms;
+    yc_rudp::ready_to_send(buffers.send_buffer, resend, payload, 1, true, 3);
+    buffers.send_buffer[3].timestamp = 3000;
+    buffers.send_buffer[3].is_resend_packet = true;
+    yc_rudp::set_send_complete(buffers.send_buffer, resend, rto, 3, 3400);
+    check(rto.rto_ms == before_retransmit_ack,
+          "ACK after retransmission does not contaminate RTT estimate");
 }
 
 void test_resend_backoff_and_timeout() {
@@ -60,16 +86,18 @@ void test_resend_backoff_and_timeout() {
     const int seq = 3;
     yc_rudp::ready_to_send(buffers.send_buffer, resend, payload, 1, true, seq);
 
-    int rtt = 100;
-    buffers.send_buffer[seq].timestamp = yc_rudp::get_timestamp() - 101;
-    auto due = yc_rudp::get_resend_packets(buffers.send_buffer, resend, rtt, 1000);
+    yc_rudp::rto_state rto;
+    buffers.send_buffer[seq].timestamp = 1000;
+    auto due = yc_rudp::get_resend_packets(buffers.send_buffer, resend, rto, 1000, 1101);
     check(due.size() == 1 && due.front() == seq, "Expired reliable packet is selected for resend");
-    check(rtt == 150, "Resend applies 1.5x timeout backoff");
+    check(rto.rto_ms == 200, "Timeout applies one 2x RTO backoff");
+    check(buffers.send_buffer[seq].timestamp == 1101, "Resend refreshes packet send timestamp");
 
-    rtt = 900;
-    buffers.send_buffer[seq].timestamp = yc_rudp::get_timestamp() - 901;
-    auto timed_out = yc_rudp::get_resend_packets(buffers.send_buffer, resend, rtt, 1000);
-    check(timed_out.empty() && rtt == -1, "Backoff beyond timeout marks connection timed out");
+    rto.rto_ms = 800;
+    rto.timed_out = false;
+    buffers.send_buffer[seq].timestamp = 2000;
+    auto timed_out = yc_rudp::get_resend_packets(buffers.send_buffer, resend, rto, 1000, 2801);
+    check(timed_out.empty() && rto.timed_out, "Backoff beyond timeout marks connection timed out");
 }
 
 void test_ordered_delivery_waits_for_gap() {
@@ -114,6 +142,7 @@ void test_sequence_wrap() {
 int main() {
     test_ack_header_roundtrip();
     test_reliable_send_and_ack_complete();
+    test_rto_smoothing_and_karn_rule();
     test_resend_backoff_and_timeout();
     test_ordered_delivery_waits_for_gap();
     test_sequence_wrap();
