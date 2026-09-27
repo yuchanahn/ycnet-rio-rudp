@@ -109,3 +109,8 @@ add_executable(loss_benchmark benchmarks/loss_benchmark_main.cpp)
 target_link_libraries(loss_benchmark PRIVATE ycnet)
 target_include_directories(loss_benchmark PRIVATE ${PROJECT_SOURCE_DIR}/benchmarks/include)
 target_compile_options(loss_benchmark PRIVATE /std:c++latest)
+
+add_executable(arena_demo examples/arena/arena_demo.cpp)
+target_link_libraries(arena_demo PRIVATE ycnet)
+target_include_directories(arena_demo PRIVATE ${PROJECT_SOURCE_DIR}/examples/arena)
+target_compile_options(arena_demo PRIVATE /std:c++latest)
