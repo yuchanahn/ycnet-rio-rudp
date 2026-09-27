@@ -77,6 +77,11 @@ if(YCNET_BUILD_TESTS)
   target_compile_options(benchmark_tests PRIVATE /std:c++latest)
   add_test(NAME benchmark_tests COMMAND benchmark_tests)
 
+  add_executable(arena_world_tests tests/arena_world_tests.cpp)
+  target_include_directories(arena_world_tests PRIVATE ${PROJECT_SOURCE_DIR}/examples/arena)
+  target_compile_options(arena_world_tests PRIVATE /std:c++latest /utf-8)
+  add_test(NAME arena_world_tests COMMAND arena_world_tests)
+
   set_tests_properties(
     rudp_tests
     rio_smoke
@@ -89,6 +94,7 @@ if(YCNET_BUILD_TESTS)
     rio_timeout_reuse_smoke
     metrics_tests
     benchmark_tests
+    arena_world_tests
     PROPERTIES TIMEOUT 30)
 endif()
 
