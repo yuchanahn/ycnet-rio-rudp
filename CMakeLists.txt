@@ -82,6 +82,12 @@ if(YCNET_BUILD_TESTS)
   target_compile_options(arena_world_tests PRIVATE /std:c++latest /utf-8)
   add_test(NAME arena_world_tests COMMAND arena_world_tests)
 
+  add_executable(arena_network_smoke tests/arena_network_smoke.cpp)
+  target_link_libraries(arena_network_smoke PRIVATE ycnet)
+  target_include_directories(arena_network_smoke PRIVATE ${PROJECT_SOURCE_DIR}/examples/arena)
+  target_compile_options(arena_network_smoke PRIVATE /std:c++latest)
+  add_test(NAME arena_network_smoke COMMAND arena_network_smoke)
+
   set_tests_properties(
     rudp_tests
     rio_smoke
@@ -95,6 +101,7 @@ if(YCNET_BUILD_TESTS)
     metrics_tests
     benchmark_tests
     arena_world_tests
+    arena_network_smoke
     PROPERTIES TIMEOUT 30)
 endif()
 

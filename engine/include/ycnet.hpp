@@ -146,7 +146,8 @@ namespace ycnet
         void send(is_no_ack_packet auto& packet) {
             auto pkt = yc_pack::pack(packet);
             auto size = build_send_buffer(send_packet_build_buff_, pkt);
-            const auto seq = yc_rudp::ready_to_send(rudp_buffs_.send_buffer, send_packet_build_buff_, size, false, 0);
+            const auto seq = yc_rudp::ready_to_send(
+                rudp_buffs_.send_buffer, resend_buff_, send_packet_build_buff_, size, false, 0);
             auto& send_buf = rudp_buffs_.send_buffer[seq];
             send_func_(send_buf.data, send_buf.len);
             ++metrics_.unreliable_sent;
