@@ -223,6 +223,8 @@ namespace ycnet
             return pkt_data.size;
         }
         bool reset_connection(const size_t& id) {
+            ids_.erase(endpoints_[id]);
+            endpoints_[id] = {};
             rto_states_[id].reset();
             seq_[id] = 0;
             end_[id] = 0;

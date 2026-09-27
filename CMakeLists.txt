@@ -59,6 +59,12 @@ if(YCNET_BUILD_TESTS)
   target_compile_options(rio_capacity_smoke PRIVATE /std:c++latest)
   add_test(NAME rio_capacity_smoke COMMAND rio_capacity_smoke)
 
+  add_executable(rio_timeout_reuse_smoke tests/rio_timeout_reuse_smoke.cpp)
+  target_link_libraries(rio_timeout_reuse_smoke PRIVATE ycnet)
+  target_include_directories(rio_timeout_reuse_smoke PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+  target_compile_options(rio_timeout_reuse_smoke PRIVATE /std:c++latest)
+  add_test(NAME rio_timeout_reuse_smoke COMMAND rio_timeout_reuse_smoke)
+
   add_executable(metrics_tests tests/metrics_tests.cpp)
   target_link_libraries(metrics_tests PRIVATE ycnet)
   target_include_directories(metrics_tests PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
@@ -80,6 +86,7 @@ if(YCNET_BUILD_TESTS)
     network_loss_tests
     rio_multi_client_smoke
     rio_capacity_smoke
+    rio_timeout_reuse_smoke
     metrics_tests
     benchmark_tests
     PROPERTIES TIMEOUT 30)
