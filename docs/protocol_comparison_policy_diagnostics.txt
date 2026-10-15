@@ -1,0 +1,1 @@
+KCP commit=b1a7a2101dcbb96017681a500d6b82bbe5a88766; virtual clock; 100 messages/s; in-flight limit=16; update=10ms; MTU=1024; payload=64/256/512; pre-established sessions; YCNet no-progress deadline=10000ms, max RTO=1000ms; UDP payload bytes incl ACK/drop; no RIO/NIC/CPU measurement

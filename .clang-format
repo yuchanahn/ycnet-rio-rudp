@@ -1,0 +1,3 @@
+BasedOnStyle: InheritParentConfig
+# Windows SDK extension headers depend on the explicit Winsock include order.
+SortIncludes: Never

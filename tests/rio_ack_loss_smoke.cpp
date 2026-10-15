@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 #include "test_packets.hpp"
 
 int main() {
@@ -43,14 +43,14 @@ int main() {
             server_error = msg;
         }
     });
-    server.set_connect_func([](const ycnet::core::endpoint_t, const size_t) {});
-    server.set_time_out_func([](const ycnet::core::endpoint_t, const size_t) {});
+    server.set_connect_callback([](const ycnet::rio::endpoint, const size_t) {});
+    server.set_timeout_callback([](const ycnet::rio::endpoint, const size_t) {});
 
-    apacket_chat::bind([&](const apacket_chat, const size_t) {
+    reliable_packet_chat::bind([&](const reliable_packet_chat, const size_t) {
         ++delivered;
     });
 
-    server.io_service_run();
+    server.start_io();
     if (!server_error.empty()) {
         closesocket(client_socket);
         WSACleanup();
@@ -70,7 +70,7 @@ int main() {
                 sizeof(server_addr));
         });
 
-    apacket_chat packet{};
+    reliable_packet_chat packet{};
     strcpy_s(packet.message, "drop-first-ack");
     client.send(packet);
 
@@ -85,31 +85,35 @@ int main() {
             0,
             reinterpret_cast<sockaddr*>(&from),
             &from_len);
-        if (len > 0 && yc_rudp::is_ack_packet(buffer)) {
-            ++acks_seen;
-            return true;
+        if (len > 0) {
+            if (ycnet::rudp::is_ack_packet(buffer)) {
+                const auto count = ++acks_seen;
+                if (count > 1) client.on_receive(buffer, static_cast<size_t>(len));
+                return true;
+            }
+            client.on_receive(buffer, static_cast<size_t>(len));
         }
         return false;
     };
 
     for (int step = 0; step < 100 && acks_seen.load() == 0; ++step) {
-        server.intr_pkt();
-        drain_ack(); // Intentionally discard the first ACK instead of passing it to client.on_recv().
+        server.process_received_packets();
+        drain_ack(); // Intentionally discard the first ACK instead of passing it to client.on_receive().
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(110));
-    client.prc_resend();
+    client.process_retransmissions();
 
     for (int step = 0; step < 100 && acks_seen.load() < 2; ++step) {
-        server.intr_pkt();
+        server.process_received_packets();
         drain_ack();
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    const auto kill_result = server.kill();
+    const auto kill_result = server.stop();
     if (!kill_result) {
-        std::cerr << "server kill failed: " << kill_result.err << std::endl;
+        std::cerr << "server stop failed: " << kill_result.err << std::endl;
     }
     closesocket(client_socket);
     WSACleanup();

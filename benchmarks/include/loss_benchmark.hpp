@@ -7,17 +7,17 @@
 #include <thread>
 
 #include "network_simulator.hpp"
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 
 namespace ycnet::benchmark {
     struct benchmark_packet {
-        static constexpr int __packet__id = 90;
-        static constexpr bool is_apacket = true;
+        static constexpr int packet_id = 90;
+        static constexpr bool is_reliable = true;
         std::uint32_t message_index{};
     };
 
     static_assert(
-        benchmark_packet::__packet__id <= (std::numeric_limits<packet_id_type>::max)(),
+        benchmark_packet::packet_id <= (std::numeric_limits<packet_id_type>::max)(),
         "benchmark packet id must fit packet_id_type");
 
     struct loss_benchmark_result {
@@ -42,13 +42,13 @@ namespace ycnet::benchmark {
 
         ycnet::rudp_handler sender(
             [](const std::string&) {},
-            [&](char* data, const size_t len) { link.send_a_to_b(data, len); });
+            [&](char* data, const size_t len) { link.send_a_to_b(data, len); }, ycnet::rudp::get_timestamp, ycnet::session_binding{101, 202});
 
         ycnet::rudp_handler receiver(
             [](const std::string&) {},
-            [&](char* data, const size_t len) { link.send_b_to_a(data, len); });
+            [&](char* data, const size_t len) { link.send_b_to_a(data, len); }, ycnet::rudp::get_timestamp, ycnet::session_binding{202, 101});
 
-        packet_events[benchmark_packet::__packet__id] =
+        packet_events[benchmark_packet::packet_id] =
             [&](void*, const packet_size_type, const size_t) { ++delivered; };
 
         const auto started = std::chrono::steady_clock::now();
@@ -61,22 +61,22 @@ namespace ycnet::benchmark {
             const int target = i + 1;
             for (int step = 0; step < 1000 && delivered < target; ++step) {
                 link.pump(
-                    [&](char* data, const size_t len) { receiver.on_recv(data, len); },
-                    [&](char* data, const size_t len) { sender.on_recv(data, len); });
-                sender.prc_resend();
+                    [&](char* data, const size_t len) { receiver.on_receive(data, len); },
+                    [&](char* data, const size_t len) { sender.on_receive(data, len); });
+                sender.process_retransmissions();
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
             }
 
             link.pump(
-                [&](char* data, const size_t len) { receiver.on_recv(data, len); },
-                [&](char* data, const size_t len) { sender.on_recv(data, len); });
+                [&](char* data, const size_t len) { receiver.on_receive(data, len); },
+                [&](char* data, const size_t len) { sender.on_receive(data, len); });
         }
 
         for (int step = 0; step < 100; ++step) {
             link.pump(
-                [&](char* data, const size_t len) { receiver.on_recv(data, len); },
-                [&](char* data, const size_t len) { sender.on_recv(data, len); });
-            sender.prc_resend();
+                [&](char* data, const size_t len) { receiver.on_receive(data, len); },
+                [&](char* data, const size_t len) { sender.on_receive(data, len); });
+            sender.process_retransmissions();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
 

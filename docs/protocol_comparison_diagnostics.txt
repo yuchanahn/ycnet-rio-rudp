@@ -1,0 +1,13 @@
+KCP commit=b1a7a2101dcbb96017681a500d6b82bbe5a88766; virtual clock; 100 messages/s; in-flight limit=16; update=10ms; MTU=1024; payload=64/256/512; UDP payload bytes incl ACK/drop; no RIO/NIC/CPU measurement
+invalid_delivery protocol=ycnet rtt=80 loss=1 seed=42 expected_index=276 actual_index=212 payload_matches=0
+invalid_delivery protocol=ycnet rtt=80 loss=1 seed=42 expected_index=276 actual_index=212 payload_matches=0
+invalid_delivery protocol=ycnet rtt=80 loss=1 seed=42 expected_index=276 actual_index=212 payload_matches=0
+invalid_delivery protocol=ycnet rtt=80 loss=5 seed=42 expected_index=75 actual_index=11 payload_matches=0
+invalid_delivery protocol=ycnet rtt=80 loss=5 seed=42 expected_index=75 actual_index=11 payload_matches=0
+invalid_delivery protocol=ycnet rtt=80 loss=5 seed=42 expected_index=75 actual_index=11 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=42 expected_index=112 actual_index=48 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=42 expected_index=112 actual_index=48 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=42 expected_index=112 actual_index=48 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=43 expected_index=294 actual_index=230 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=43 expected_index=294 actual_index=230 payload_matches=0
+invalid_delivery protocol=ycnet rtt=150 loss=1 seed=43 expected_index=294 actual_index=230 payload_matches=0

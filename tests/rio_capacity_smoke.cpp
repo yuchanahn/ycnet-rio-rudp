@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "test_packets.hpp"
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 
 int main() {
     constexpr unsigned short kPort = 17780;
@@ -44,11 +44,11 @@ int main() {
     ycnet::rudp_server<kMaxClients, 1, kPort> server([&](const std::string& msg) {
         if (msg.find("capacity") != std::string::npos) ++capacity_logs;
     });
-    server.set_connect_func([&](const ycnet::core::endpoint_t, const size_t) { ++connected; });
-    server.set_time_out_func([](const ycnet::core::endpoint_t, const size_t) {});
+    server.set_connect_callback([&](const ycnet::rio::endpoint, const size_t) { ++connected; });
+    server.set_timeout_callback([](const ycnet::rio::endpoint, const size_t) {});
 
-    apacket_chat::bind([&](const apacket_chat, const size_t) { ++delivered; });
-    server.io_service_run();
+    reliable_packet_chat::bind([&](const reliable_packet_chat, const size_t) { ++delivered; });
+    server.start_io();
 
     std::vector<std::unique_ptr<ycnet::rudp_handler>> clients;
     for (int i = 0; i < kAttemptedClients; ++i) {
@@ -59,14 +59,14 @@ int main() {
                        reinterpret_cast<const sockaddr*>(&server_addr), sizeof(server_addr));
             }));
 
-        apacket_chat packet{};
+        reliable_packet_chat packet{};
         const auto text = "capacity-" + std::to_string(i);
         strcpy_s(packet.message, text.c_str());
         clients.back()->send(packet);
     }
 
     for (int step = 0; step < 250; ++step) {
-        server.intr_pkt();
+        server.process_received_packets();
         for (int i = 0; i < kAttemptedClients; ++i) {
             char buffer[1024]{};
             sockaddr_in from{};
@@ -74,14 +74,14 @@ int main() {
             const int len = recvfrom(sockets[i], buffer, static_cast<int>(sizeof(buffer)), 0,
                                      reinterpret_cast<sockaddr*>(&from), &from_len);
             if (len > 0) {
-                acked[i] = yc_rudp::is_ack_packet(buffer);
-                clients[i]->on_recv(buffer, static_cast<size_t>(len));
+                acked[i] = ycnet::rudp::is_ack_packet(buffer);
+                clients[i]->on_receive(buffer, static_cast<size_t>(len));
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 
-    const auto kill_result = server.kill();
+    const auto kill_result = server.stop();
     for (const auto socket_handle : sockets) closesocket(socket_handle);
     WSACleanup();
 

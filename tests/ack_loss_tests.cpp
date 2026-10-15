@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 #include "test_packets.hpp"
 
 namespace {
@@ -26,19 +26,19 @@ void test_duplicate_reliable_packet_is_reacked_without_redelivery() {
         [](const std::string&) {},
         [&](char* data, const size_t len) {
             wire_packets.emplace_back(data, data + len);
-        });
+        }, ycnet::rudp::get_timestamp, ycnet::session_binding{101, 202});
 
     ycnet::rudp_handler receiver(
         [](const std::string&) {},
         [&](char* data, const size_t len) {
             receiver_replies.emplace_back(data, data + len);
-        });
+        }, ycnet::rudp::get_timestamp, ycnet::session_binding{202, 101});
 
-    apacket_chat::bind([&](const apacket_chat, const size_t) {
+    reliable_packet_chat::bind([&](const reliable_packet_chat, const size_t) {
         ++delivered;
     });
 
-    apacket_chat packet{};
+    reliable_packet_chat packet{};
     strcpy_s(packet.message, "ack-loss-regression");
     sender.send(packet);
 
@@ -48,17 +48,17 @@ void test_duplicate_reliable_packet_is_reacked_without_redelivery() {
     }
 
     auto& reliable = wire_packets.front();
-    receiver.on_recv(reliable.data(), reliable.size());
+    receiver.on_receive(reliable.data(), reliable.size());
 
     check(delivered == 1, "First reliable packet is delivered once");
-    check(receiver_replies.size() == 1 && yc_rudp::is_ack_packet(receiver_replies.front().data()),
+    check(receiver_replies.size() == 1 && ycnet::rudp::is_ack_packet(receiver_replies.front().data()),
           "First reliable packet is ACKed");
 
     receiver_replies.clear(); // Simulate the first ACK being lost in transit.
-    receiver.on_recv(reliable.data(), reliable.size());
+    receiver.on_receive(reliable.data(), reliable.size());
 
     check(delivered == 1, "Duplicate reliable packet is not redelivered");
-    check(receiver_replies.size() == 1 && yc_rudp::is_ack_packet(receiver_replies.front().data()),
+    check(receiver_replies.size() == 1 && ycnet::rudp::is_ack_packet(receiver_replies.front().data()),
           "Duplicate reliable packet is ACKed again after ACK loss");
 }
 }

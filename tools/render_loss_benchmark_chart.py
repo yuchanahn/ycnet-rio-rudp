@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--exe",
         type=Path,
-        default=Path("build/Debug/loss_benchmark.exe"),
+        default=Path("build/Release/loss_benchmark.exe"),
     )
     parser.add_argument("--out-dir", type=Path, default=Path("docs"))
     return parser.parse_args()
@@ -75,7 +75,7 @@ def render_chart(rows: list[dict[str, str]], path: Path) -> None:
     fig.text(
         0.5,
         0.01,
-        "Reliable messages: 100 per condition · deterministic simulator · Windows Debug build",
+        f"Reliable messages: {messages[0]} per condition · deterministic simulator · pre-established sessions",
         ha="center",
         fontsize=9,
     )

@@ -2,37 +2,36 @@
 #include <vector>
 #include <ranges>
 
-//yc class to hold the data
-#define YC_USE
+namespace ycnet::detail {
 
-template <typename Nto>
-concept nto_type = requires {
-    YC_USE Nto::thread_id;
+template <typename value_type>
+concept producer_owned_type = requires {
+    value_type::thread_id;
 };
 
 /**
  * \brief threads... <-> one thread only (main_thread?)
- * 다수의 스레드와 하나의 스레드가 lock free 하게 객체를 관리 할 수 있는 클래스입니다.
- * 예상하는 대로 동작하였을 경우. thread safe 함을 확인 ^^.
+ * 생산자별 버퍼를 하나의 소비자가 읽는 객체 저장소입니다.
+ * 현재 volatile 상태 공유에는 C++ 메모리 모델에 따른 동기화 보장이 없습니다.
  * [*** 중요! ***] object를 read하는 thread는 한개여야 합니다.
  * [*** 중요! ***] object를 write하는 thread는 여러개 일 수 있습니다.
- * \tparam Type Type of thread safe object
- * \tparam ThreadCount Number of threads, default is 1
- * \tparam Max Maximum number of threads, default is 1
+ * \tparam value_type value_type of thread safe object
+ * \tparam thread_count Number of threads, default is 1
+ * \tparam max_items Maximum number of items per producer, default is 8196
  */
-template <nto_type Type, int ThreadCount = 1, int Max = 8196>
-class nto_memory {
-    std::vector<int> index_q_[ThreadCount];
+template <producer_owned_type value_type, int thread_count = 1, int max_items = 8196>
+class mpsc_buffer {
+    std::vector<int> index_q_[thread_count];
     std::vector<int> r_index_q_;
-    std::vector<Type> mem_;
-    std::vector<Type*> mem_ptr_;
-    volatile bool used_[Max * ThreadCount] {};
+    std::vector<value_type> mem_;
+    std::vector<value_type*> mem_ptr_;
+    volatile bool used_[max_items * thread_count] {};
     
     int find_first_false(int thread_id) {
         auto& iq = index_q_[thread_id];
         if(iq.empty()) {
-            for(int i = 0; i < Max; ++i) {
-                if(!used_[thread_id * Max + i]) iq.push_back(Max * thread_id + i);
+            for(int i = 0; i < max_items; ++i) {
+                if(!used_[thread_id * max_items + i]) iq.push_back(max_items * thread_id + i);
             }
         }
         if(iq.empty()) return -1;
@@ -41,14 +40,14 @@ class nto_memory {
         return i;
     }
 public:
-    explicit nto_memory() : mem_(Max * ThreadCount), mem_ptr_(Max * ThreadCount) {
-        for (int i = 0; i < ThreadCount; ++i) {
-            for (int j = 0; j < Max; ++j) 
-                mem_[i * Max + j].thread_id = i;
-            index_q_[i].reserve(Max);
+    explicit mpsc_buffer() : mem_(max_items * thread_count), mem_ptr_(max_items * thread_count) {
+        for (int i = 0; i < thread_count; ++i) {
+            for (int j = 0; j < max_items; ++j) 
+                mem_[i * max_items + j].thread_id = i;
+            index_q_[i].reserve(max_items);
         }
     }
-    bool try_push(const int thread_id, Type*& out) {
+    bool try_push(const int thread_id, value_type*& out) {
         const int idx = find_first_false(thread_id);
         if(idx == -1) return false;
         out = &mem_[idx];
@@ -59,9 +58,9 @@ public:
      * \brief 이 함수를 실행했다면 더이상 obj를 참조해서는 안됍니다.
      * \param obj read thread가 권한을 가질 수 있게 되는 객체
      */
-    void make_readable(Type*& obj) {
-        auto idx = (obj - mem_.data()) % Max;
-        used_[obj->thread_id * Max + idx] = true;
+    void make_readable(value_type*& obj) {
+        auto idx = (obj - mem_.data()) % max_items;
+        used_[obj->thread_id * max_items + idx] = true;
         obj = nullptr;
     }
 
@@ -70,9 +69,9 @@ public:
      * 함수를 호출하고 나서 반환한 obj에 절대로 접근해서는 안됍니다.
      * \param obj write thread 가 객체에 쓸 수 있도록 객체를 반환합니다.
      */
-    void read_end(Type*& obj) {
-        auto idx = (obj - mem_.data()) % Max;
-        used_[obj->thread_id * Max + idx] = false;
+    void read_end(value_type*& obj) {
+        auto idx = (obj - mem_.data()) % max_items;
+        used_[obj->thread_id * max_items + idx] = false;
         obj = nullptr;
     }
     
@@ -91,11 +90,11 @@ public:
 struct user_info {
     int id;
     int endpoint;
-    YC_USE int thread_id;
+    int thread_id;
 };
 
 int main(int argc, char* argv[]) {
-    nto_memory<user_info, 4> mem;
+    mpsc_buffer<user_info, 4> mem;
     user_info* ptr;
     
     mem.try_push(0, ptr);
@@ -110,3 +109,5 @@ int main(int argc, char* argv[]) {
 }
 ===============================
 */
+
+} // namespace ycnet::detail

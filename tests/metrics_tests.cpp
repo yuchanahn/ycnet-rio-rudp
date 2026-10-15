@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "test_packets.hpp"
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 
 namespace {
 int failures = 0;
@@ -25,9 +25,9 @@ int main() {
     std::vector<std::vector<char>> wire;
     ycnet::rudp_handler sender(
         [](const std::string&) {},
-        [&](char* data, const size_t len) { wire.emplace_back(data, data + len); });
+        [&](char* data, const size_t len) { wire.emplace_back(data, data + len); }, ycnet::rudp::get_timestamp, ycnet::session_binding{101, 202});
 
-    apacket_chat packet{};
+    reliable_packet_chat packet{};
     strcpy_s(packet.message, "metrics");
     check(sender.send(packet), "Reliable send succeeds");
 
@@ -37,13 +37,13 @@ int main() {
     check(metrics.current_rto_ms == 100, "Initial RTO is exposed");
 
     std::this_thread::sleep_for(std::chrono::milliseconds(105));
-    sender.prc_resend();
+    sender.process_retransmissions();
     metrics = sender.metrics();
     check(metrics.retransmissions == 1, "Retransmission counter increments on timeout resend");
-    check(metrics.current_rto_ms == 200, "RTO metric reflects timeout backoff");
+    check(metrics.current_rto_ms == 100, "Retransmission backoff preserves the RTT estimator");
 
-    char ack = ycnet::make_ack_pkt(0);
-    sender.on_recv(&ack, 1);
+    auto ack = ycnet::make_ack_packet(0, {202, 101});
+    sender.on_receive(ack.data(), ack.size());
     metrics = sender.metrics();
     check(metrics.acks_received == 1, "ACK receive counter increments");
 
@@ -51,12 +51,12 @@ int main() {
     int delivered = 0;
     ycnet::rudp_handler receiver(
         [](const std::string&) {},
-        [&](char* data, const size_t len) { replies.emplace_back(data, data + len); });
-    apacket_chat::bind([&](const apacket_chat, const size_t) { ++delivered; });
+        [&](char* data, const size_t len) { replies.emplace_back(data, data + len); }, ycnet::rudp::get_timestamp, ycnet::session_binding{202, 101});
+    reliable_packet_chat::bind([&](const reliable_packet_chat, const size_t) { ++delivered; });
 
     if (!wire.empty()) {
-        receiver.on_recv(wire.front().data(), wire.front().size());
-        receiver.on_recv(wire.front().data(), wire.front().size());
+        receiver.on_receive(wire.front().data(), wire.front().size());
+        receiver.on_receive(wire.front().data(), wire.front().size());
     }
 
     const auto receiver_metrics = receiver.metrics();

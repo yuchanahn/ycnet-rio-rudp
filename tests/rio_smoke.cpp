@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 #include "test_packets.hpp"
 
 int main() {
@@ -47,21 +47,21 @@ int main() {
         }
     });
 
-    server.set_connect_func([&](const ycnet::core::endpoint_t ep, size_t client_id) {
+    server.set_connect_callback([&](const ycnet::rio::endpoint ep, size_t client_id) {
         connected = true;
         std::cout << "[connect] " << ep.to_string() << " id=" << client_id << std::endl;
     });
-    server.set_time_out_func([](const ycnet::core::endpoint_t ep, size_t client_id) {
+    server.set_timeout_callback([](const ycnet::rio::endpoint ep, size_t client_id) {
         std::cout << "[timeout] " << ep.to_string() << " id=" << client_id << std::endl;
     });
 
-    apacket_chat::bind([&](apacket_chat packet, size_t client_id) {
+    reliable_packet_chat::bind([&](reliable_packet_chat packet, size_t client_id) {
         received_text = packet.message;
         received = true;
         std::cout << "[packet] id=" << client_id << " text=" << received_text << std::endl;
     });
 
-    server.io_service_run();
+    server.start_io();
     if (!server_error.empty()) {
         std::cerr << "server init failed: " << server_error << std::endl;
         closesocket(client_socket);
@@ -84,13 +84,13 @@ int main() {
             }
         });
 
-    apacket_chat packet{};
+    reliable_packet_chat packet{};
     strcpy_s(packet.message, "ycnet-rio-smoke");
     client.send(packet);
 
     bool got_ack = false;
     for (int step = 0; step < 400 && !received.load(); ++step) {
-        server.intr_pkt();
+        server.process_received_packets();
 
         for (;;) {
             char buffer[1024]{};
@@ -113,17 +113,17 @@ int main() {
             }
 
             if (len > 0) {
-                got_ack = got_ack || yc_rudp::is_ack_packet(buffer);
-                client.on_recv(buffer, static_cast<size_t>(len));
+                got_ack = got_ack || ycnet::rudp::is_ack_packet(buffer);
+                client.on_receive(buffer, static_cast<size_t>(len));
             }
         }
 
-        client.prc_resend();
+        client.process_retransmissions();
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     for (int step = 0; step < 40 && !got_ack; ++step) {
-        server.intr_pkt();
+        server.process_received_packets();
         char buffer[1024]{};
         sockaddr_in from{};
         int from_len = sizeof(from);
@@ -135,15 +135,15 @@ int main() {
             reinterpret_cast<sockaddr*>(&from),
             &from_len);
         if (len > 0) {
-            got_ack = got_ack || yc_rudp::is_ack_packet(buffer);
-            client.on_recv(buffer, static_cast<size_t>(len));
+            got_ack = got_ack || ycnet::rudp::is_ack_packet(buffer);
+            client.on_receive(buffer, static_cast<size_t>(len));
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    const auto kill_result = server.kill();
+    const auto kill_result = server.stop();
     if (!kill_result) {
-        std::cerr << "server kill failed: " << kill_result.err << std::endl;
+        std::cerr << "server stop failed: " << kill_result.err << std::endl;
     }
 
     closesocket(client_socket);

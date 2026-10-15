@@ -6,7 +6,7 @@
 
 #include "network_simulator.hpp"
 #include "test_packets.hpp"
-#include "ycnet.hpp"
+#include "ycnet/ycnet.hpp"
 
 namespace {
 bool run_loss_case(const int loss_percent) {
@@ -19,20 +19,20 @@ bool run_loss_case(const int loss_percent) {
         [](const std::string&) {},
         [&](char* data, const size_t len) {
             link.send_a_to_b(data, len);
-        });
+        }, ycnet::rudp::get_timestamp, ycnet::session_binding{101, 202});
 
     ycnet::rudp_handler receiver(
         [](const std::string&) {},
         [&](char* data, const size_t len) {
             link.send_b_to_a(data, len);
-        });
+        }, ycnet::rudp::get_timestamp, ycnet::session_binding{202, 101});
 
-    apacket_chat::bind([&](const apacket_chat, const size_t) {
+    reliable_packet_chat::bind([&](const reliable_packet_chat, const size_t) {
         ++delivered;
     });
 
     for (int message = 0; message < kMessages; ++message) {
-        apacket_chat packet{};
+        reliable_packet_chat packet{};
         strcpy_s(packet.message, "loss-test");
         if (!sender.send(packet)) {
             return false;
@@ -41,10 +41,10 @@ bool run_loss_case(const int loss_percent) {
         const int target = message + 1;
         for (int step = 0; step < 250 && delivered < target; ++step) {
             link.pump(
-                [&](char* data, const size_t len) { receiver.on_recv(data, len); },
-                [&](char* data, const size_t len) { sender.on_recv(data, len); });
+                [&](char* data, const size_t len) { receiver.on_receive(data, len); },
+                [&](char* data, const size_t len) { sender.on_receive(data, len); });
 
-            sender.prc_resend();
+            sender.process_retransmissions();
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
 
@@ -54,8 +54,8 @@ bool run_loss_case(const int loss_percent) {
 
         // Drain the ACK before starting the next message so the send window reflects reality.
         link.pump(
-            [&](char* data, const size_t len) { receiver.on_recv(data, len); },
-            [&](char* data, const size_t len) { sender.on_recv(data, len); });
+            [&](char* data, const size_t len) { receiver.on_receive(data, len); },
+            [&](char* data, const size_t len) { sender.on_receive(data, len); });
     }
 
     const auto stats = link.stats();

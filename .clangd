@@ -1,0 +1,7 @@
+CompileFlags:
+  CompilationDatabase: build_analysis
+---
+If:
+  PathMatch: .*\.hpp
+CompileFlags:
+  Add: [/TP, /std:c++latest]
